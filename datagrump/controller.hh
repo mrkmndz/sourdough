@@ -11,7 +11,7 @@ private:
   bool debug_; /* Enables debugging output */
 
   /* Add member variables here */
-  unsigned int current_window;
+  double current_window;
 
 public:
   /* Public interface for the congestion controller */
