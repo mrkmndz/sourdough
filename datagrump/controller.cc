@@ -85,9 +85,6 @@ void Controller::update_current_window(uint time_delta) {
   double next_window = scaling_factor * ewma_throughput / PKT_SIZE;
 
   if (!in_low_throughput_state) {
-    if (next_window < current_window) {
-      next_window -= current_window - next_window; // double down delta
-    }
     current_window = next_window;
     // switch states if window is small
     if (current_window <= 1) {
