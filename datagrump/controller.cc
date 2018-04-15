@@ -51,7 +51,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
   /* Default: take no action */
   uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
   
-  if (rtt > 60) {
+  if (rtt > 80) {
     current_window *= .75;
   } else {
     current_window += .75;
