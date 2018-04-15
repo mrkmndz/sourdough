@@ -13,10 +13,12 @@ private:
   /* Add member variables here */
   double current_window;
   double ewma_throughput;
-  uint64_t prev_ack_timestamp;
+  uint64_t prev_wakeup_timestamp;
+  uint bytes_received_since_update;
   double exponential_moving_average_irregular( 
     double lambda, double sample, double prev_sample, 
     double delta_time, double ema_prev );
+  void update_current_window(uint time_delta);
 
 
 public:

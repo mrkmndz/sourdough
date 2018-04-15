@@ -8,7 +8,8 @@ using namespace std;
 
 /* Default constructor */
 Controller::Controller( const bool debug )
-  : debug_( debug ), current_window( 20 ), ewma_throughput( 6 ), prev_ack_timestamp( 1523764000 )
+  : debug_( debug ), current_window( 20 ), ewma_throughput( 6 ),
+  prev_wakeup_timestamp( 0 ), bytes_received_since_update( 0 )
 {}
 
 /* Get current window size, in datagrams */
@@ -51,13 +52,12 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 {
   /* Default: take no action */
   //uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
-  double lambda = 0.3;
-  double desired_latency = 200; // 200 ms
-  ewma_throughput = exponential_moving_average_irregular(lambda, 1424, 1424,
-                        timestamp_ack_received - prev_ack_timestamp, ewma_throughput);
-  prev_ack_timestamp = timestamp_ack_received;
+  //double lambda = 0.3;
+  //double desired_latency = 200; // 200 ms
+  //ewma_throughput = lambda * (1424 / time_delta) + (1 - lambda) * ewma_throughput;
   
-  current_window = desired_latency * ewma_throughput;
+  //current_window = desired_latency * ewma_throughput;
+  bytes_received_since_update += 1424;
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received
@@ -84,9 +84,24 @@ double Controller::exponential_moving_average_irregular(
    return ema_next;
 }
 
+void Controller::update_current_window(uint time_delta) {
+  double sample_throughput = (double)bytes_received_since_update / (double)time_delta;
+  double lambda = 0.1;
+  double desired_latency = 65; // 200 ms
+  ewma_throughput = lambda * sample_throughput + (1 - lambda) * ewma_throughput;
+  current_window = desired_latency * ewma_throughput / 1424;
+  if (current_window == 0) current_window = 5;
+  bytes_received_since_update = 0;
+}
+
 /* How long to wait (in milliseconds) if there are no acks
    before sending one more datagram */
 unsigned int Controller::timeout_ms()
 {
+  uint delta = timestamp_ms() - prev_wakeup_timestamp;
+  if (delta > 0) {
+    update_current_window(delta);
+  }
+  prev_wakeup_timestamp = timestamp_ms();
   return 1000; /* timeout of one second */
 }
