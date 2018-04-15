@@ -17,11 +17,7 @@ private:
   uint bytes_received_since_update;
   bool in_low_throughput_state;
   uint packets_in_flight;
-  double ewma_throughput_dx;
 
-  double exponential_moving_average_irregular( 
-    double lambda, double sample, double prev_sample, 
-    double delta_time, double ema_prev );
   void update_current_window(uint time_delta);
 
 

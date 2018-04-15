@@ -4,14 +4,15 @@
 #include "timestamp.hh"
 #include <math.h>
 
+#define PKT_SIZE 1424
+#define MIN_WINDOW_SIZE 4
 using namespace std;
 
 /* Default constructor */
 Controller::Controller( const bool debug )
   : debug_( debug ), current_window( 20 ), ewma_throughput( 6 ),
   prev_wakeup_timestamp( 0 ), bytes_received_since_update( 0 ),
-  in_low_throughput_state( false ), packets_in_flight( 0 ),
-  ewma_throughput_dx( 0 )
+  in_low_throughput_state( false ), packets_in_flight( 0 )
 {}
 
 /* Get current window size, in datagrams */
@@ -60,11 +61,11 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
     } else {
       current_window += .75;
     }
-    if (current_window < 4) {
-      current_window = 4;
+    if (current_window < MIN_WINDOW_SIZE) {
+      current_window = MIN_WINDOW_SIZE;
     } 
   }
-  bytes_received_since_update += 1424;
+  bytes_received_since_update += PKT_SIZE;
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received
@@ -75,45 +76,29 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
   }
 }
 
-// https://oroboro.com/irregular-ema/
-// calculates exponential moving average on irregularly spaced time series data
-// (aka acks from the receiver)
-double Controller::exponential_moving_average_irregular( 
-    double lambda, double sample, double prev_sample, 
-    double delta_time, double ema_prev )
-{
-   double a = delta_time / lambda; 
-   double u = exp( a * -1 ); // e^(a*-1)
-   double v = ( 1 - u ) / a;
- 
-   double ema_next = ( u * ema_prev ) + (( v - u ) * prev_sample ) + 
-                    (( 1.0 - v ) * sample );
-   return ema_next;
-}
-
 void Controller::update_current_window(uint time_delta) {
   double sample_throughput = (double)bytes_received_since_update / (double)time_delta;
-  double lambda = 0.1;
-  double desired_latency = 30; // not exactly
-  double prev_ewma_throughput = ewma_throughput;
+  // this is a good choice of lambda given the rate this updates the average (about once every 15-20ms)
+  double lambda = 0.1; 
+  double scaling_factor = 35; // this kinda determines how it performs overall... potentially overtuned
   ewma_throughput = lambda * sample_throughput + (1 - lambda) * ewma_throughput;
-  ewma_throughput_dx = lambda * (ewma_throughput - prev_ewma_throughput) + (1 - lambda) * ewma_throughput_dx;
+  double next_window = scaling_factor * ewma_throughput / PKT_SIZE;
 
   if (!in_low_throughput_state) {
-    current_window = desired_latency * ewma_throughput / 1424 + ewma_throughput_dx / desired_latency;
+    if (next_window < current_window) {
+      next_window -= current_window - next_window; // double down delta
+    }
+    current_window = next_window;
     // switch states if window is small
-    //cout << ewma_throughput << endl;
     if (current_window <= 1) {
       in_low_throughput_state = true;
-      // cout << "into low state " << endl;
-      current_window = 4;
+      current_window = MIN_WINDOW_SIZE;
     }
   } else {
     // switch states if this estimate is higher than current window
-    if (desired_latency * ewma_throughput / 1424 > current_window) {
-      // cout << "into high state " << endl;
+    if (next_window > current_window) {
       in_low_throughput_state = false;
-      current_window = desired_latency * ewma_throughput / 1424;
+      current_window = next_window;
     }
   }
   bytes_received_since_update = 0;
@@ -124,6 +109,8 @@ void Controller::update_current_window(uint time_delta) {
 unsigned int Controller::timeout_ms()
 {
   uint delta = timestamp_ms() - prev_wakeup_timestamp;
+  // this function gets called a few times per wakeup so
+  // only update window when time has passed
   if (delta > 0) {
     update_current_window(delta);
   }
