@@ -10,7 +10,8 @@ using namespace std;
 Controller::Controller( const bool debug )
   : debug_( debug ), current_window( 20 ), ewma_throughput( 6 ),
   prev_wakeup_timestamp( 0 ), bytes_received_since_update( 0 ),
-  in_low_throughput_state( false )
+  in_low_throughput_state( false ), packets_in_flight( 0 ),
+  ewma_throughput_dx( 0 )
 {}
 
 /* Get current window size, in datagrams */
@@ -34,7 +35,7 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
 				    /* datagram was sent because of a timeout */ )
 {
   /* Default: take no action */
-
+  packets_in_flight++;
   if ( debug_ ) {
     cerr << "At time " << send_timestamp
 	 << " sent datagram " << sequence_number << " (timeout = " << after_timeout << ")\n";
@@ -51,6 +52,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 			       const uint64_t timestamp_ack_received )
                                /* when the ack was received (by sender) */
 {
+  packets_in_flight--;
   if (in_low_throughput_state) {
     uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
     if (rtt > 60) {
@@ -92,20 +94,26 @@ double Controller::exponential_moving_average_irregular(
 void Controller::update_current_window(uint time_delta) {
   double sample_throughput = (double)bytes_received_since_update / (double)time_delta;
   double lambda = 0.1;
-  double desired_latency = 15; // 200 ms
+  double desired_latency = 35; // not exactly
+  double prev_ewma_throughput = ewma_throughput;
   ewma_throughput = lambda * sample_throughput + (1 - lambda) * ewma_throughput;
+  ewma_throughput_dx = lambda * (ewma_throughput - prev_ewma_throughput) + (1 - lambda) * ewma_throughput_dx;
 
   if (!in_low_throughput_state) {
-    current_window = desired_latency * ewma_throughput / 1424;
+    current_window = desired_latency * ewma_throughput / 1424 + ewma_throughput_dx / 8;
     // switch states if window is small
-    if (current_window < 4) {
+    //cout << ewma_throughput << endl;
+    if (current_window <= 1) {
       in_low_throughput_state = true;
+      // cout << "into low state " << endl;
       current_window = 4;
     }
   } else {
     // switch states if this estimate is higher than current window
     if (desired_latency * ewma_throughput / 1424 > current_window) {
+      // cout << "into high state " << endl;
       in_low_throughput_state = false;
+      current_window = desired_latency * ewma_throughput / 1424;
     }
   }
   bytes_received_since_update = 0;
