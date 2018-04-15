@@ -94,13 +94,13 @@ double Controller::exponential_moving_average_irregular(
 void Controller::update_current_window(uint time_delta) {
   double sample_throughput = (double)bytes_received_since_update / (double)time_delta;
   double lambda = 0.1;
-  double desired_latency = 35; // not exactly
+  double desired_latency = 30; // not exactly
   double prev_ewma_throughput = ewma_throughput;
   ewma_throughput = lambda * sample_throughput + (1 - lambda) * ewma_throughput;
   ewma_throughput_dx = lambda * (ewma_throughput - prev_ewma_throughput) + (1 - lambda) * ewma_throughput_dx;
 
   if (!in_low_throughput_state) {
-    current_window = desired_latency * ewma_throughput / 1424 + ewma_throughput_dx / 8;
+    current_window = desired_latency * ewma_throughput / 1424 + ewma_throughput_dx / desired_latency;
     // switch states if window is small
     //cout << ewma_throughput << endl;
     if (current_window <= 1) {
