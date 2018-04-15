@@ -2,12 +2,13 @@
 
 #include "controller.hh"
 #include "timestamp.hh"
+#include <math.h>
 
 using namespace std;
 
 /* Default constructor */
 Controller::Controller( const bool debug )
-  : debug_( debug ), current_window( 20 )
+  : debug_( debug ), current_window( 20 ), ewma_throughput( 6 ), prev_ack_timestamp( 1523764000 )
 {}
 
 /* Get current window size, in datagrams */
@@ -49,17 +50,14 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
                                /* when the ack was received (by sender) */
 {
   /* Default: take no action */
-  uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
+  //uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
+  double lambda = 0.3;
+  double desired_latency = 200; // 200 ms
+  ewma_throughput = exponential_moving_average_irregular(lambda, 1424, 1424,
+                        timestamp_ack_received - prev_ack_timestamp, ewma_throughput);
+  prev_ack_timestamp = timestamp_ack_received;
   
-  if (rtt > 80) {
-    current_window *= .75;
-  } else {
-    current_window += .75;
-  }
-  if (current_window < 4) {
-    current_window = 4;
-  }
-
+  current_window = desired_latency * ewma_throughput;
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received
@@ -68,6 +66,22 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 	 << ", received @ time " << recv_timestamp_acked << " by receiver's clock)"
 	 << endl;
   }
+}
+
+// https://oroboro.com/irregular-ema/
+// calculates exponential moving average on irregularly spaced time series data
+// (aka acks from the receiver)
+double Controller::exponential_moving_average_irregular( 
+    double lambda, double sample, double prev_sample, 
+    double delta_time, double ema_prev )
+{
+   double a = delta_time / lambda; 
+   double u = exp( a * -1 ); // e^(a*-1)
+   double v = ( 1 - u ) / a;
+ 
+   double ema_next = ( u * ema_prev ) + (( v - u ) * prev_sample ) + 
+                    (( 1.0 - v ) * sample );
+   return ema_next;
 }
 
 /* How long to wait (in milliseconds) if there are no acks

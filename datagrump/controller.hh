@@ -12,6 +12,12 @@ private:
 
   /* Add member variables here */
   double current_window;
+  double ewma_throughput;
+  uint64_t prev_ack_timestamp;
+  double exponential_moving_average_irregular( 
+    double lambda, double sample, double prev_sample, 
+    double delta_time, double ema_prev );
+
 
 public:
   /* Public interface for the congestion controller */
