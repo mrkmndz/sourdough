@@ -15,6 +15,7 @@ private:
   double ewma_throughput;
   uint64_t prev_wakeup_timestamp;
   uint bytes_received_since_update;
+  bool in_low_throughput_state;
   double exponential_moving_average_irregular( 
     double lambda, double sample, double prev_sample, 
     double delta_time, double ema_prev );

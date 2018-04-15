@@ -9,7 +9,8 @@ using namespace std;
 /* Default constructor */
 Controller::Controller( const bool debug )
   : debug_( debug ), current_window( 20 ), ewma_throughput( 6 ),
-  prev_wakeup_timestamp( 0 ), bytes_received_since_update( 0 )
+  prev_wakeup_timestamp( 0 ), bytes_received_since_update( 0 ),
+  in_low_throughput_state( false )
 {}
 
 /* Get current window size, in datagrams */
@@ -50,13 +51,17 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 			       const uint64_t timestamp_ack_received )
                                /* when the ack was received (by sender) */
 {
-  /* Default: take no action */
-  //uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
-  //double lambda = 0.3;
-  //double desired_latency = 200; // 200 ms
-  //ewma_throughput = lambda * (1424 / time_delta) + (1 - lambda) * ewma_throughput;
-  
-  //current_window = desired_latency * ewma_throughput;
+  if (in_low_throughput_state) {
+    uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
+    if (rtt > 60) {
+      current_window *= .75;
+    } else {
+      current_window += .75;
+    }
+    if (current_window < 4) {
+      current_window = 4;
+    } 
+  }
   bytes_received_since_update += 1424;
 
   if ( debug_ ) {
@@ -87,10 +92,22 @@ double Controller::exponential_moving_average_irregular(
 void Controller::update_current_window(uint time_delta) {
   double sample_throughput = (double)bytes_received_since_update / (double)time_delta;
   double lambda = 0.1;
-  double desired_latency = 65; // 200 ms
+  double desired_latency = 45; // 200 ms
   ewma_throughput = lambda * sample_throughput + (1 - lambda) * ewma_throughput;
-  current_window = desired_latency * ewma_throughput / 1424;
-  if (current_window == 0) current_window = 5;
+
+  if (!in_low_throughput_state) {
+    current_window = desired_latency * ewma_throughput / 1424;
+    // switch states if window is small
+    if (current_window < 4) {
+      in_low_throughput_state = false;
+      current_window = 4;
+    }
+  } else {
+    // switch states if this estimate is higher than current window
+    if (desired_latency * ewma_throughput / 1424 > current_window) {
+      in_low_throughput_state = false;
+    }
+  }
   bytes_received_since_update = 0;
 }
 
