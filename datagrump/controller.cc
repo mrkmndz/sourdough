@@ -83,7 +83,7 @@ bool Controller::should_send(uint64_t inflight)
     bdp = 1;
   }
 
-  return inflight < bdp * 2 && timestamp_ms() >= nextSendTime;
+  return inflight < bdp * 1.1;// && timestamp_ms() >= nextSendTime;
 }
 
 /* A datagram was sent */
