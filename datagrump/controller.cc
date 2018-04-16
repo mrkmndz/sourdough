@@ -15,7 +15,7 @@ using namespace std;
 Controller::Controller( const bool debug )
   : debug_(false || debug ), bytes_delivered(0), last_arrival(timestamp_ms()),
   pm_mutex(), packet_map(), nextSendTime(timestamp_ms()), rw_mutex(), rtt_window(), bw_mutex(), bw_window(),
-  cached_rtt(BASELINE_RTT), cached_bw(BASELINE_BW), pacing_gain_index(0)
+  cached_rtt(BASELINE_RTT), cached_bw(BASELINE_BW), pacing_gain(2.0)
 {}
 
 double Controller::window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout) {
@@ -60,10 +60,13 @@ void Controller::update_max_bw(double bw, uint64_t send_time){
 
 void Controller::cycle_pacing_gain(){
   static uint64_t last_update = 0;
+  static int pacing_gain_index = 0;
+  static const double pacing_gains[8] = {1.25, 0.75, 1, 1, 1, 1, 1, 1};
   uint64_t now = timestamp_ms();
   if (now - last_update > cached_rtt) {
     last_update = now;
     pacing_gain_index = (pacing_gain_index + 1) % 8;
+    pacing_gain = pacing_gains[pacing_gain_index];
   }
 }
 
@@ -98,8 +101,9 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   std::lock_guard<std::mutex> guard(pm_mutex);
   packet_map[sequence_number] = state;
 
-  auto pacing_gain = pacing_gains[pacing_gain_index];
-  nextSendTime = timestamp_ms() + PKT_SIZE / ( pacing_gain * cached_bw );
+  uint64_t interval = ((float) PKT_SIZE) / ( pacing_gain * cached_bw );
+  cerr << interval << endl;
+  nextSendTime = timestamp_ms() + interval;
 
   if ( debug_ ) {
     cerr << "At time " << send_timestamp
