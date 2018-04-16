@@ -1,5 +1,6 @@
 #include <iostream>
 #include <ctime>
+#include <string>
 
 #include "controller.hh"
 #include "timestamp.hh"
@@ -56,16 +57,17 @@ void Controller::update_max_bw(double bw, uint64_t send_time){
   window_entry entry;
   entry.value = bw;
   entry.time = send_time;
+  entry.time = timestamp_ms();
   bw_window.push_front(entry);
-  cached_bw = window_scan(bw_window, BASELINE_BW, true, 6*cached_rtt);
+  cached_bw = window_scan(bw_window, BASELINE_BW, true, 3*cached_rtt);
 }
 
 void Controller::cycle_pacing_gain(){
   static uint64_t last_update = 0;
   static int pacing_gain_index = 0;
-  static const double pacing_gains[8] = {1.25, .75, 1, 1, 1, 1, 1, 1};
+  static const double pacing_gains[8] = {1, 1, 1, 2, 0.5, 1, 1, 1};
   uint64_t now = timestamp_ms();
-  if (now - last_update > cached_rtt) {
+  if (now - last_update > cached_rtt / 2) {
     last_update = now;
     pacing_gain_index = (pacing_gain_index + 1) % 8;
     pacing_gain = pacing_gains[pacing_gain_index];
@@ -116,15 +118,26 @@ bool Controller::should_send(uint64_t inflight)
     bdp = 1;
   }
 
-  auto limit = bdp * 1.5;
+  auto limit = bdp * 1.1;
 
   bool full = inflight > limit;
   bool waiting = now_ns() < nextSendTimeNs;
+  static std::string str = "";
+  /*
   if (full) {
-    cerr << "full" << endl;
+    str = str + "full\n";
   } else if (waiting) {
-    cerr << "waiting" << endl;
+    str = str + "waiting\n";
+  } else {
+    str = str + "approved!\n";
   }
+  static int count = 0;
+  count++;
+  if (count % 1000 == 0) {
+    cout << str << endl;
+    str = "";
+  }
+  */
 
   return !full && !waiting;
 }
@@ -143,7 +156,10 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   std::lock_guard<std::mutex> guard(pm_mutex);
   packet_map[sequence_number] = state;
 
-  uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( pacing_gain * cached_bw * 100);
+  uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( pacing_gain * cached_bw * 1000);
+  if (intervalNs > 10) {
+    intervalNs = 10;
+  }
   nextSendTimeNs = now_ns() + intervalNs;
 
   if ( debug_ ) {
