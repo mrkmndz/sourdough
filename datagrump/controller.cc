@@ -63,7 +63,7 @@ void Controller::update_max_bw(double bw, uint64_t send_time){
 void Controller::cycle_pacing_gain(){
   static uint64_t last_update = 0;
   static int pacing_gain_index = 0;
-  static const double pacing_gains[8] = {2, 4, 2, 2, 1, 1, 1, 1};
+  static const double pacing_gains[8] = {1.25, .75, 1, 1, 1, 1, 1, 1};
   uint64_t now = timestamp_ms();
   if (now - last_update > cached_rtt) {
     last_update = now;
@@ -109,7 +109,7 @@ bool Controller::should_send(uint64_t inflight)
   auto bdp = cached_rtt * cached_bw;
   static uint64_t last = 7;
   auto now = timestamp_ms();
-  if (now != last && now % 2 == 0) {
+  if (now != last) {
     last = now;
     cerr << timestamp_ms() << ": rtt =" << cached_rtt <<
       ", bw=" << cached_bw << ", pg=" << pacing_gain << 
@@ -151,8 +151,8 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   std::lock_guard<std::mutex> guard(pm_mutex);
   packet_map[sequence_number] = state;
 
-  uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( pacing_gain * cached_bw );
-  cerr << "int " << ((double) intervalNs) / MILLION;
+  uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( pacing_gain * cached_bw * 100);
+  cerr << "int " << ((double) intervalNs) / MILLION << endl;
   nextSendTimeNs = now_ns() + intervalNs;
 
   if ( debug_ ) {
