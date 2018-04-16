@@ -11,14 +11,17 @@ private:
   bool debug_; /* Enables debugging output */
 
   /* Add member variables here */
-  double current_window;
-  double ewma_throughput;
-  uint64_t prev_wakeup_timestamp;
-  uint bytes_received_since_update;
-  bool in_low_throughput_state;
-  uint packets_in_flight;
+  struct packet_state_t {
+    uint64_t bytes_delivered_before_sending;
+    uint64_t last_arrival_before_sending;
+  }
+  typedef struct packet_state_t packet_state;
 
-  void update_current_window(uint time_delta);
+  uint64_t bytes_delivered;
+  uint64_t last_arrival;
+  std::map<uint64_t, packet_state> packet_map;
+
+  uint64_t nextSendTime;
 
 
 public:
@@ -29,8 +32,7 @@ public:
   /* Default constructor */
   Controller( const bool debug );
 
-  /* Get current window size, in datagrams */
-  unsigned int window_size();
+  bool Controller::should_send(uint64_t inflight);
 
   /* A datagram was sent */
   void datagram_was_sent( const uint64_t sequence_number,
