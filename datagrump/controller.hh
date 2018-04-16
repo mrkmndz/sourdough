@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <deque>
 #include <map>
+#include <mutex>
 
 
 /* Congestion controller interface */
@@ -22,6 +23,7 @@ private:
 
   uint64_t bytes_delivered;
   uint64_t last_arrival;
+  std::mutex pm_mutex;
   std::map<uint64_t, packet_state> packet_map;
 
   uint64_t nextSendTime;
@@ -33,7 +35,9 @@ private:
   typedef struct window_entry_t window_entry;
   uint64_t window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout);
 
+  std::mutex rw_mutex;
   std::deque<window_entry> rtt_window;
+  std::mutex bw_mutex;
   std::deque<window_entry> bw_window;
   double min_rtt();
   double max_bw();

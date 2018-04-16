@@ -15,8 +15,8 @@ using namespace std;
 
 /* Default constructor */
 Controller::Controller( const bool debug )
-  : debug_( debug ), bytes_delivered(0), last_arrival(timestamp_ms()),
-  packet_map(), nextSendTime(timestamp_ms()), rtt_window(), bw_window(),
+  : debug_( true || debug ), bytes_delivered(0), last_arrival(timestamp_ms()),
+  pm_mutex(), packet_map(), nextSendTime(timestamp_ms()), rw_mutex(), rtt_window(), bw_mutex(), bw_window(),
   pacing_gain_index(0)
 {}
 
@@ -25,7 +25,7 @@ uint64_t Controller::window_scan(std::deque<window_entry>& window, double baseli
     return baseline;
   }
   uint64_t now = timestamp_ms();
-  while (window.back().time < now - timeout) {
+  while (!window.empty() && window.back().time > timeout && window.back().time < now - timeout) {
     window.pop_back();
   }
   if (window.empty()) {
@@ -43,25 +43,29 @@ uint64_t Controller::window_scan(std::deque<window_entry>& window, double baseli
 }
 
 double Controller::min_rtt(){
+  std::lock_guard<std::mutex> guard(rw_mutex);
   return window_scan(rtt_window, BASELINE_RTT, false, RTT_TIMEOUT);
 }
 
 double Controller::max_bw(){
+  std::lock_guard<std::mutex> guard(bw_mutex);
   return window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
 }
 
 void Controller::update_min_rtt(double rtt) {
+  std::lock_guard<std::mutex> guard(rw_mutex);
   window_entry entry;
   entry.value = rtt;
   entry.time = timestamp_ms();
-  rtt_window.push_back(entry);
+  rtt_window.push_front(entry);
 }
 
 void Controller::update_max_bw(double bw){
+  std::lock_guard<std::mutex> guard(bw_mutex);
   window_entry entry;
   entry.value = bw;
   entry.time = timestamp_ms();
-  bw_window.push_back(entry);
+  bw_window.push_front(entry);
 }
 
 void Controller::cycle_pacing_gain(){
@@ -98,6 +102,7 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   packet_state state;
   state.bytes_delivered_before_sending = bytes_delivered;
   state.last_arrival_before_sending = last_arrival;
+  std::lock_guard<std::mutex> guard(pm_mutex);
   packet_map[sequence_number] = state;
 
   auto pacing_gain = pacing_gains[pacing_gain_index];
@@ -125,6 +130,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
   bytes_delivered += PKT_SIZE;
   last_arrival = timestamp_ms();
 
+  std::lock_guard<std::mutex> guard(pm_mutex);
   packet_state state = packet_map[sequence_number_acked];
   packet_map.erase(sequence_number_acked);
 
