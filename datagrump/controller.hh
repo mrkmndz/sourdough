@@ -2,6 +2,9 @@
 #define CONTROLLER_HH
 
 #include <cstdint>
+#include <deque>
+#include <map>
+
 
 /* Congestion controller interface */
 
@@ -14,7 +17,7 @@ private:
   struct packet_state_t {
     uint64_t bytes_delivered_before_sending;
     uint64_t last_arrival_before_sending;
-  }
+  };
   typedef struct packet_state_t packet_state;
 
   uint64_t bytes_delivered;
@@ -26,8 +29,9 @@ private:
   struct window_entry_t {
     uint64_t value;
     uint64_t time;
-  }
+  };
   typedef struct window_entry_t window_entry;
+  uint64_t window_scan(std::deque<window_entry>& window, uint64_t baseline, bool max, uint64_t timeout);
 
   std::deque<window_entry> rtt_window;
   std::deque<window_entry> bw_window;
@@ -45,7 +49,7 @@ public:
   /* Default constructor */
   Controller( const bool debug );
 
-  bool Controller::should_send(uint64_t inflight);
+  bool should_send(uint64_t inflight);
 
   /* A datagram was sent */
   void datagram_was_sent( const uint64_t sequence_number,
