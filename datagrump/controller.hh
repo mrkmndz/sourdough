@@ -45,7 +45,7 @@ private:
   void update_max_bw(double bw);
 
   int pacing_gain_index;
-  const double pacing_gains[8] = {5/4, 3/4, 1, 1, 1, 1, 1, 1};
+  const double pacing_gains[8] = {1.25, 0.75, 1, 1, 1, 1, 1, 1};
   void cycle_pacing_gain();
 
 

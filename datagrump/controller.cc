@@ -9,7 +9,7 @@
 #define BASELINE_RTT 100
 #define BASELINE_BW 1
 #define RTT_TIMEOUT 1000
-#define BW_TIMEOUT 300
+#define BW_TIMEOUT 800
 #define PG_FREQ 400
 using namespace std;
 
@@ -42,20 +42,20 @@ double Controller::window_scan(std::deque<window_entry>& window, double baseline
   return selected;
 }
 
-void Controller::update_min_rtt(double rtt) {
+void Controller::update_min_rtt(double rtt, uint64_t send_time) {
   std::lock_guard<std::mutex> guard(rw_mutex);
   window_entry entry;
   entry.value = rtt;
-  entry.time = timestamp_ms();
+  entry.time = send_time;
   rtt_window.push_front(entry);
   cached_rtt = window_scan(rtt_window, BASELINE_RTT, false, RTT_TIMEOUT);
 }
 
-void Controller::update_max_bw(double bw){
+void Controller::update_max_bw(double bw, uint64_t send_time){
   std::lock_guard<std::mutex> guard(bw_mutex);
   window_entry entry;
   entry.value = bw;
-  entry.time = timestamp_ms();
+  entry.time = send_time;
   bw_window.push_front(entry);
   cached_bw = window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
 }
@@ -63,7 +63,7 @@ void Controller::update_max_bw(double bw){
 void Controller::cycle_pacing_gain(){
   static uint64_t last_update = 0;
   uint64_t now = timestamp_ms();
-  if (now - last_update > PG_FREQ) {
+  if (now - last_update > cached_rtt) {
     last_update = now;
     pacing_gain_index = (pacing_gain_index + 1) % 8;
   }
@@ -120,7 +120,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
                                /* when the ack was received (by sender) */
 {
   uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
-  update_min_rtt(rtt);
+  update_min_rtt(rtt, send_timestamp_acked);
 
   bytes_delivered += PKT_SIZE;
   last_arrival = timestamp_ms();
@@ -131,7 +131,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 
   float delivery_rate = ((float) (bytes_delivered - state.bytes_delivered_before_sending)) / (timestamp_ms() - state.last_arrival_before_sending);
 
-  update_max_bw(delivery_rate);
+  update_max_bw(delivery_rate, send_timestamp_acked);
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received
