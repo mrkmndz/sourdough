@@ -8,9 +8,9 @@
 #define MIN_WINDOW_SIZE 4
 #define BASELINE_RTT 100
 #define BASELINE_BW 1
-#define RTT_TIMEOUT 300000
-#define BW_TIMEOUT 600
-#define PG_FREQ 100
+#define RTT_TIMEOUT 1000
+#define BW_TIMEOUT 300
+#define PG_FREQ 400
 using namespace std;
 
 /* Default constructor */
@@ -25,7 +25,7 @@ double Controller::window_scan(std::deque<window_entry>& window, double baseline
     return baseline;
   }
   uint64_t now = timestamp_ms();
-  while (!window.empty() && window.back().time > timeout && window.back().time < now - timeout) {
+  while (!window.empty() && now > timeout && window.back().time < now - timeout) {
     window.pop_back();
   }
   if (window.empty()) {
@@ -79,11 +79,11 @@ bool Controller::should_send(uint64_t inflight)
     cerr << "At time " << timestamp_ms()
 	 << " bdp is " << bdp << endl;
   }
-  if (bdp < 10) {
-    bdp = 10;
+  if (bdp < 1) {
+    bdp = 1;
   }
 
-  return inflight < bdp && timestamp_ms() >= nextSendTime;
+  return inflight < bdp * 2 && timestamp_ms() >= nextSendTime;
 }
 
 /* A datagram was sent */
