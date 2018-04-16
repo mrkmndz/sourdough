@@ -17,10 +17,10 @@ using namespace std;
 Controller::Controller( const bool debug )
   : debug_(false || debug ), bytes_delivered(0), last_arrival(timestamp_ms()),
   pm_mutex(), packet_map(), nextSendTime(timestamp_ms()), rw_mutex(), rtt_window(), bw_mutex(), bw_window(),
-  pacing_gain_index(0), cached_rtt(BASELINE_RTT), cached_bw(BASELINE_BW)
+  cached_rtt(BASELINE_RTT), cached_bw(BASELINE_BW), pacing_gain_index(0)
 {}
 
-uint64_t Controller::window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout) {
+double Controller::window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout) {
   if (window.empty()) {
     return baseline;
   }
@@ -31,7 +31,7 @@ uint64_t Controller::window_scan(std::deque<window_entry>& window, double baseli
   if (window.empty()) {
     return baseline;
   }
-  uint64_t selected = max ? 0 : UINT64_MAX;
+  double selected = max ? 0 : UINT64_MAX;
   for (auto entry : window) {
     if (
         (max && entry.value > selected) || 
@@ -79,6 +79,9 @@ bool Controller::should_send(uint64_t inflight)
     cerr << "At time " << timestamp_ms()
 	 << " bdp is " << bdp << endl;
   }
+  if (bdp < 10) {
+    bdp = 10;
+  }
 
   return inflight < bdp && timestamp_ms() >= nextSendTime;
 }
@@ -98,7 +101,7 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   packet_map[sequence_number] = state;
 
   auto pacing_gain = pacing_gains[pacing_gain_index];
-  nextSendTime = timestamp_ms() + PKT_SIZE / ( pacing_gain * max_bw() );
+  nextSendTime = timestamp_ms() + PKT_SIZE / ( pacing_gain * cached_bw );
 
   if ( debug_ ) {
     cerr << "At time " << send_timestamp

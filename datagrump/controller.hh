@@ -33,7 +33,7 @@ private:
     uint64_t time;
   };
   typedef struct window_entry_t window_entry;
-  uint64_t window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout);
+  double window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout);
 
   std::mutex rw_mutex;
   std::deque<window_entry> rtt_window;
