@@ -134,7 +134,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
   packet_state state = packet_map[sequence_number_acked];
   packet_map.erase(sequence_number_acked);
 
-  auto delivery_rate = (bytes_delivered - state.bytes_delivered_before_sending) / (timestamp_ms() - state.last_arrival_before_sending);
+  float delivery_rate = ((float) (bytes_delivered - state.bytes_delivered_before_sending)) / (timestamp_ms() - state.last_arrival_before_sending);
 
   update_max_bw(delivery_rate);
 
