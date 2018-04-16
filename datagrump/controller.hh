@@ -39,8 +39,8 @@ private:
   std::deque<window_entry> rtt_window;
   std::mutex bw_mutex;
   std::deque<window_entry> bw_window;
-  double min_rtt();
-  double max_bw();
+  float cached_rtt;
+  float cached_bw;
   void update_min_rtt(double rtt);
   void update_max_bw(double bw);
 

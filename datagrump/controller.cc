@@ -15,9 +15,9 @@ using namespace std;
 
 /* Default constructor */
 Controller::Controller( const bool debug )
-  : debug_( true || debug ), bytes_delivered(0), last_arrival(timestamp_ms()),
+  : debug_(false || debug ), bytes_delivered(0), last_arrival(timestamp_ms()),
   pm_mutex(), packet_map(), nextSendTime(timestamp_ms()), rw_mutex(), rtt_window(), bw_mutex(), bw_window(),
-  pacing_gain_index(0)
+  pacing_gain_index(0), cached_rtt(BASELINE_RTT), cached_bw(BASELINE_BW)
 {}
 
 uint64_t Controller::window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout) {
@@ -42,22 +42,13 @@ uint64_t Controller::window_scan(std::deque<window_entry>& window, double baseli
   return selected;
 }
 
-double Controller::min_rtt(){
-  std::lock_guard<std::mutex> guard(rw_mutex);
-  return window_scan(rtt_window, BASELINE_RTT, false, RTT_TIMEOUT);
-}
-
-double Controller::max_bw(){
-  std::lock_guard<std::mutex> guard(bw_mutex);
-  return window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
-}
-
 void Controller::update_min_rtt(double rtt) {
   std::lock_guard<std::mutex> guard(rw_mutex);
   window_entry entry;
   entry.value = rtt;
   entry.time = timestamp_ms();
   rtt_window.push_front(entry);
+  cached_rtt = window_scan(rtt_window, BASELINE_RTT, false, RTT_TIMEOUT);
 }
 
 void Controller::update_max_bw(double bw){
@@ -66,6 +57,7 @@ void Controller::update_max_bw(double bw){
   entry.value = bw;
   entry.time = timestamp_ms();
   bw_window.push_front(entry);
+  cached_bw = window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
 }
 
 void Controller::cycle_pacing_gain(){
@@ -82,7 +74,7 @@ bool Controller::should_send(uint64_t inflight)
 {
   cycle_pacing_gain();
 
-  auto bdp = min_rtt() * max_bw();
+  auto bdp = cached_rtt * cached_bw;
   if ( debug_ ) {
     cerr << "At time " << timestamp_ms()
 	 << " bdp is " << bdp << endl;
