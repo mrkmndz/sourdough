@@ -10,8 +10,50 @@ using namespace std;
 
 /* Default constructor */
 Controller::Controller( const bool debug )
-  : debug_( debug ),
+  : debug_( debug )
 {}
+
+uint64_t window_scan(std::deque<window_entry>& window, uint64_t baseline, bool max, uint64_t timeout) {
+  if (window.empty()) {
+    return baseline;
+  }
+  uint64_t now = timestamp_ms();
+  while (window.back().time < now - timeout) {
+    window.pop_back();
+  }
+  if (window.empty()) {
+    return baseline;
+  }
+  uint64_t selected;
+  for (auto entry : window) {
+    if (
+        (max && entry.value > selected) || 
+        (!max && entry.value < selected) {
+      selected = entry.value;
+    }
+  }
+  return selected;
+}
+
+uint64_t min_rtt(){
+  return window_scan(rtt_window, BASELINE_RTT, false, RTT_TIMEOUT);
+}
+uint64_t max_bw(){
+  return window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
+}
+void update_min_rtt(uint64_t rtt) {
+  window_entry entry;
+  entry.value = rtt;
+  entry.time = timestamp_ms();
+  rtt_window.push_back(entry);
+}
+
+void update_max_bw(uint64_t bw){
+  window_entry entry;
+  entry.value = bw;
+  entry.time = timestamp_ms();
+  bw_window.push_back(entry);
+}
 
 /* Get current window size, in datagrams */
 bool Controller::should_send(uint64_t inflight)

@@ -23,6 +23,19 @@ private:
 
   uint64_t nextSendTime;
 
+  struct window_entry_t {
+    uint64_t value;
+    uint64_t time;
+  }
+  typedef struct window_entry_t window_entry;
+
+  std::deque<window_entry> rtt_window;
+  std::deque<window_entry> bw_window;
+  uint64_t min_rtt();
+  uint64_t max_bw();
+  void update_min_rtt(uint64_t rtt);
+  void update_max_bw(uint64_t bw);
+
 
 public:
   /* Public interface for the congestion controller */
