@@ -40,6 +40,10 @@ private:
   void update_min_rtt(uint64_t rtt);
   void update_max_bw(uint64_t bw);
 
+  int pacing_gain_index;
+  const double pacing_gains[8] = {5/4, 3/4, 1, 1, 1, 1, 1, 1};
+  void cycle_pacing_gain();
+
 
 public:
   /* Public interface for the congestion controller */

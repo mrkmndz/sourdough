@@ -11,7 +11,8 @@ using namespace std;
 /* Default constructor */
 Controller::Controller( const bool debug )
   : debug_( debug ), bytes_delivered(0), last_arrival(timestamp_ms()),
-  packet_map(), nextSendTime(timestamp_ms()), rtt_window(), bw_window()
+  packet_map(), nextSendTime(timestamp_ms()), rtt_window(), bw_window(),
+  pacing_gain_index(0)
 {}
 
 uint64_t Controller::window_scan(std::deque<window_entry>& window, uint64_t baseline, bool max, uint64_t timeout) {
@@ -39,9 +40,11 @@ uint64_t Controller::window_scan(std::deque<window_entry>& window, uint64_t base
 uint64_t Controller::min_rtt(){
   return window_scan(rtt_window, BASELINE_RTT, false, RTT_TIMEOUT);
 }
+
 uint64_t Controller::max_bw(){
   return window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
 }
+
 void Controller::update_min_rtt(uint64_t rtt) {
   window_entry entry;
   entry.value = rtt;
@@ -56,9 +59,19 @@ void Controller::update_max_bw(uint64_t bw){
   bw_window.push_back(entry);
 }
 
+void Controller::cycle_pacing_gain(){
+  static uint64_t last_update = 0;
+  uint64_t now = timestamp_ms();
+  if (now - last_update > PG_FREQ) {
+    last_update = now;
+    pacing_gain_index = (pacing_gain_index + 1) % 8;
+  }
+}
+
 /* Get current window size, in datagrams */
 bool Controller::should_send(uint64_t inflight)
 {
+  cycle_pacing_gain();
 
   auto bdp = min_rtt() * max_bw();
   if ( debug_ ) {
@@ -82,6 +95,7 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   state.last_arrival_before_sending = last_arrival;
   packet_map[sequence_number] = state;
 
+  auto pacing_gain = pacing_gains[pacing_gain_index];
   nextSendTime = timestamp_ms() + SIZE / ( pacing_gain * max_bw() );
 
   if ( debug_ ) {
