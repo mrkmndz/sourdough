@@ -26,7 +26,7 @@ private:
   std::mutex pm_mutex;
   std::map<uint64_t, packet_state> packet_map;
 
-  uint64_t nextSendTime;
+  uint64_t nextSendTimeNs;
 
   struct window_entry_t {
     double value;
