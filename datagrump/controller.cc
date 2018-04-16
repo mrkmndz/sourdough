@@ -8,9 +8,7 @@
 #define MIN_WINDOW_SIZE 4
 #define BASELINE_RTT 100
 #define BASELINE_BW 1
-#define RTT_TIMEOUT 1000
-#define BW_TIMEOUT 800
-#define PG_FREQ 400
+#define RTT_TIMEOUT 100000
 using namespace std;
 
 /* Default constructor */
@@ -57,7 +55,7 @@ void Controller::update_max_bw(double bw, uint64_t send_time){
   entry.value = bw;
   entry.time = send_time;
   bw_window.push_front(entry);
-  cached_bw = window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
+  cached_bw = window_scan(bw_window, BASELINE_BW, true, 6*cached_rtt);
 }
 
 void Controller::cycle_pacing_gain(){

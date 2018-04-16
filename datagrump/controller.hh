@@ -41,8 +41,8 @@ private:
   std::deque<window_entry> bw_window;
   float cached_rtt;
   float cached_bw;
-  void update_min_rtt(double rtt);
-  void update_max_bw(double bw);
+  void update_min_rtt(double rtt, uint64_t send_time);
+  void update_max_bw(double bw, uint64_t send_time);
 
   int pacing_gain_index;
   const double pacing_gains[8] = {1.25, 0.75, 1, 1, 1, 1, 1, 1};
