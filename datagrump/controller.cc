@@ -4,8 +4,13 @@
 #include "timestamp.hh"
 #include <math.h>
 
-#define PKT_SIZE 1424
+#define PKT_SIZE 1
 #define MIN_WINDOW_SIZE 4
+#define BASELINE_RTT 100
+#define BASELINE_BW 1
+#define RTT_TIMEOUT 300000
+#define BW_TIMEOUT 600
+#define PG_FREQ 100
 using namespace std;
 
 /* Default constructor */
@@ -15,7 +20,7 @@ Controller::Controller( const bool debug )
   pacing_gain_index(0)
 {}
 
-uint64_t Controller::window_scan(std::deque<window_entry>& window, uint64_t baseline, bool max, uint64_t timeout) {
+uint64_t Controller::window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout) {
   if (window.empty()) {
     return baseline;
   }
@@ -26,7 +31,7 @@ uint64_t Controller::window_scan(std::deque<window_entry>& window, uint64_t base
   if (window.empty()) {
     return baseline;
   }
-  uint64_t selected;
+  uint64_t selected = max ? 0 : UINT64_MAX;
   for (auto entry : window) {
     if (
         (max && entry.value > selected) || 
@@ -37,22 +42,22 @@ uint64_t Controller::window_scan(std::deque<window_entry>& window, uint64_t base
   return selected;
 }
 
-uint64_t Controller::min_rtt(){
+double Controller::min_rtt(){
   return window_scan(rtt_window, BASELINE_RTT, false, RTT_TIMEOUT);
 }
 
-uint64_t Controller::max_bw(){
+double Controller::max_bw(){
   return window_scan(bw_window, BASELINE_BW, true, BW_TIMEOUT);
 }
 
-void Controller::update_min_rtt(uint64_t rtt) {
+void Controller::update_min_rtt(double rtt) {
   window_entry entry;
   entry.value = rtt;
   entry.time = timestamp_ms();
   rtt_window.push_back(entry);
 }
 
-void Controller::update_max_bw(uint64_t bw){
+void Controller::update_max_bw(double bw){
   window_entry entry;
   entry.value = bw;
   entry.time = timestamp_ms();
@@ -96,7 +101,7 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   packet_map[sequence_number] = state;
 
   auto pacing_gain = pacing_gains[pacing_gain_index];
-  nextSendTime = timestamp_ms() + SIZE / ( pacing_gain * max_bw() );
+  nextSendTime = timestamp_ms() + PKT_SIZE / ( pacing_gain * max_bw() );
 
   if ( debug_ ) {
     cerr << "At time " << send_timestamp
@@ -117,7 +122,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
   uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
   update_min_rtt(rtt);
 
-  bytes_delivered += SIZE;
+  bytes_delivered += PKT_SIZE;
   last_arrival = timestamp_ms();
 
   packet_state state = packet_map[sequence_number_acked];

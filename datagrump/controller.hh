@@ -27,18 +27,18 @@ private:
   uint64_t nextSendTime;
 
   struct window_entry_t {
-    uint64_t value;
+    double value;
     uint64_t time;
   };
   typedef struct window_entry_t window_entry;
-  uint64_t window_scan(std::deque<window_entry>& window, uint64_t baseline, bool max, uint64_t timeout);
+  uint64_t window_scan(std::deque<window_entry>& window, double baseline, bool max, uint64_t timeout);
 
   std::deque<window_entry> rtt_window;
   std::deque<window_entry> bw_window;
-  uint64_t min_rtt();
-  uint64_t max_bw();
-  void update_min_rtt(uint64_t rtt);
-  void update_max_bw(uint64_t bw);
+  double min_rtt();
+  double max_bw();
+  void update_min_rtt(double rtt);
+  void update_max_bw(double bw);
 
   int pacing_gain_index;
   const double pacing_gains[8] = {5/4, 3/4, 1, 1, 1, 1, 1, 1};

@@ -112,7 +112,7 @@ void DatagrumpSender::send_datagram( const bool after_timeout )
 
 bool DatagrumpSender::window_is_open()
 {
-  controller_.should_send(sequence_number_ - next_ack_expected_);
+  return controller_.should_send(sequence_number_ - next_ack_expected_);
 }
 
 int DatagrumpSender::loop()
