@@ -107,14 +107,6 @@ bool Controller::should_send(uint64_t inflight)
 {
 
   auto bdp = cached_rtt * cached_bw;
-  static uint64_t last = 7;
-  auto now = timestamp_ms();
-  if (now != last) {
-    last = now;
-    cerr << timestamp_ms() << ": rtt =" << cached_rtt <<
-      ", bw=" << cached_bw << ", pg=" << pacing_gain << 
-      ", if=" << inflight << ", bdp=" << bdp << endl;
-  }
   cycle_pacing_gain();
   if ( debug_ ) {
     cerr << "At time " << timestamp_ms()
@@ -152,7 +144,6 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   packet_map[sequence_number] = state;
 
   uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( pacing_gain * cached_bw * 100);
-  cerr << "int " << ((double) intervalNs) / MILLION << endl;
   nextSendTimeNs = now_ns() + intervalNs;
 
   if ( debug_ ) {
