@@ -59,7 +59,7 @@ void Controller::update_max_bw(double bw, uint64_t send_time){
   entry.time = send_time;
   entry.time = timestamp_ms();
   bw_window.push_front(entry);
-  cached_bw = window_scan(bw_window, BASELINE_BW, true, 3*cached_rtt);
+  cached_bw = window_scan(bw_window, BASELINE_BW, true, 2.5*cached_rtt);
 }
 
 void Controller::cycle_pacing_gain(){
@@ -67,7 +67,7 @@ void Controller::cycle_pacing_gain(){
   static int pacing_gain_index = 0;
   static const double pacing_gains[8] = {1, 1, 1, 1.25, .75, 1, 1, 1};
   uint64_t now = timestamp_ms();
-  if (now - last_update > cached_rtt) {
+  if (now - last_update > cached_rtt/2) {
     last_update = now;
     pacing_gain_index = (pacing_gain_index + 1) % 8;
     pacing_gain = pacing_gains[pacing_gain_index];
@@ -118,7 +118,7 @@ bool Controller::should_send(uint64_t inflight)
     bdp = 1;
   }
 
-  auto limit = bdp * 2;
+  auto limit = bdp * 1.2;
 
   bool full = inflight * PKT_SIZE > limit;
   bool waiting = now_ns() < nextSendTimeNs;
