@@ -10,7 +10,7 @@
 #define PKT_SIZE 1400
 #define MIN_WINDOW_SIZE 4
 #define BASELINE_RTT 100
-#define BASELINE_BW 2000
+#define BASELINE_BW 100
 #define RTT_TIMEOUT 100000
 using namespace std;
 
