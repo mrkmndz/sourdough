@@ -67,7 +67,7 @@ void Controller::cycle_pacing_gain(){
   static int pacing_gain_index = 0;
   static const double pacing_gains[8] = {1, 1, 1, 1.25, .75, 1, 1, 1};
   uint64_t now = timestamp_ms();
-  if (now - last_update > cached_rtt / 2) {
+  if (now - last_update > cached_rtt) {
     last_update = now;
     pacing_gain_index = (pacing_gain_index + 1) % 8;
     pacing_gain = pacing_gains[pacing_gain_index];
@@ -118,7 +118,7 @@ bool Controller::should_send(uint64_t inflight)
     bdp = 1;
   }
 
-  auto limit = bdp * 1.1;
+  auto limit = bdp * 2;
 
   bool full = inflight * PKT_SIZE > limit;
   bool waiting = now_ns() < nextSendTimeNs;
@@ -162,6 +162,9 @@ uint64_t Controller::datagram_was_sent( const uint64_t sequence_number,
   packet_map[sequence_number] = state;
 
   uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( cached_bw * pacing_gain );
+  if (intervalNs > MILLION) {
+    intervalNs = MILLION;
+  }
 
   if ( debug_ ) {
     cerr << "At time " << send_timestamp
