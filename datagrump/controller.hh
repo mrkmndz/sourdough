@@ -59,7 +59,7 @@ public:
   bool should_send(uint64_t inflight);
 
   /* A datagram was sent */
-  void datagram_was_sent( const uint64_t sequence_number,
+  uint64_t datagram_was_sent( const uint64_t sequence_number,
 			  const uint64_t send_timestamp,
 			  const bool after_timeout );
 

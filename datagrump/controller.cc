@@ -7,10 +7,10 @@
 #include "util.hh"
 #include <math.h>
 
-#define PKT_SIZE 1
+#define PKT_SIZE 1400
 #define MIN_WINDOW_SIZE 4
 #define BASELINE_RTT 100
-#define BASELINE_BW 1
+#define BASELINE_BW 2000
 #define RTT_TIMEOUT 100000
 using namespace std;
 
@@ -65,7 +65,7 @@ void Controller::update_max_bw(double bw, uint64_t send_time){
 void Controller::cycle_pacing_gain(){
   static uint64_t last_update = 0;
   static int pacing_gain_index = 0;
-  static const double pacing_gains[8] = {1, 1, 1, 2, 0.5, 1, 1, 1};
+  static const double pacing_gains[8] = {1, 1, 1, 1.25, .75, 1, 1, 1};
   uint64_t now = timestamp_ms();
   if (now - last_update > cached_rtt / 2) {
     last_update = now;
@@ -120,10 +120,14 @@ bool Controller::should_send(uint64_t inflight)
 
   auto limit = bdp * 1.1;
 
-  bool full = inflight > limit;
+  bool full = inflight * PKT_SIZE > limit;
   bool waiting = now_ns() < nextSendTimeNs;
-  static std::string str = "";
   /*
+  static std::string str = "";
+  str = str + "at " + std::to_string(timestamp_ms());
+  str = str + "bw: " + std::to_string(cached_bw);
+  str = str + ", rtt: " + std::to_string(cached_rtt);
+  str = str + ", limit: " + std::to_string(bdp);
   if (full) {
     str = str + "full\n";
   } else if (waiting) {
@@ -133,17 +137,18 @@ bool Controller::should_send(uint64_t inflight)
   }
   static int count = 0;
   count++;
-  if (count % 1000 == 0) {
+  if (count % 100 == 0) {
     cout << str << endl;
     str = "";
   }
   */
 
+  return !full;
   return !full && !waiting;
 }
 
 /* A datagram was sent */
-void Controller::datagram_was_sent( const uint64_t sequence_number,
+uint64_t Controller::datagram_was_sent( const uint64_t sequence_number,
 				    /* of the sent datagram */
 				    const uint64_t send_timestamp,
                                     /* in milliseconds */
@@ -156,16 +161,13 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
   std::lock_guard<std::mutex> guard(pm_mutex);
   packet_map[sequence_number] = state;
 
-  uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( pacing_gain * cached_bw * 1000);
-  if (intervalNs > 10) {
-    intervalNs = 10;
-  }
-  nextSendTimeNs = now_ns() + intervalNs;
+  uint64_t intervalNs = ((double) PKT_SIZE * MILLION) / ( cached_bw * pacing_gain );
 
   if ( debug_ ) {
     cerr << "At time " << send_timestamp
 	 << " sent datagram " << sequence_number << " (timeout = " << after_timeout << ")\n";
   }
+  return intervalNs;
 }
 
 /* An ack was received */

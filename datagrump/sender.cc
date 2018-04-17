@@ -2,6 +2,10 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <pthread.h>
+#include <unistd.h>
+#include <mutex>
+#include <condition_variable>
 
 #include "socket.hh"
 #include "contest_message.hh"
@@ -14,7 +18,7 @@ using namespace PollerShortNames;
 /* simple sender class to handle the accounting */
 class DatagrumpSender
 {
-private:
+public:
   UDPSocket socket_;
   Controller controller_; /* your class */
 
@@ -29,10 +33,13 @@ private:
   void got_ack( const uint64_t timestamp, const ContestMessage & msg );
   bool window_is_open();
 
-public:
   DatagrumpSender( const char * const host, const char * const port,
 		   const bool debug );
   int loop();
+
+  std::mutex ack_lock;
+  std::condition_variable cv;
+  bool waiting;
 };
 
 int main( int argc, char *argv[] )
@@ -64,7 +71,10 @@ DatagrumpSender::DatagrumpSender( const char * const host,
   : socket_(),
     controller_( debug ),
     sequence_number_( 0 ),
-    next_ack_expected_( 0 )
+    next_ack_expected_( 0 ),
+    ack_lock(),
+    cv(),
+    waiting(false)
 {
   /* turn on timestamps when socket receives a datagram */
   socket_.set_timestamps();
@@ -95,8 +105,12 @@ void DatagrumpSender::got_ack( const uint64_t timestamp,
 			    timestamp );
 }
 
-void DatagrumpSender::send_datagram( const bool after_timeout )
+bool DatagrumpSender::window_is_open()
 {
+  return controller_.should_send(sequence_number_ - next_ack_expected_);
+}
+
+void DatagrumpSender::send_datagram( const bool after_timeout ){
   /* All messages use the same dummy payload */
   static const string dummy_payload( 1424, 'x' );
 
@@ -104,52 +118,51 @@ void DatagrumpSender::send_datagram( const bool after_timeout )
   cm.set_send_timestamp();
   socket_.send( cm.to_string() );
 
-  /* Inform congestion controller */
-  controller_.datagram_was_sent( cm.header.sequence_number,
-				 cm.header.send_timestamp,
-				 after_timeout );
+  uint64_t intervalNs = 
+    controller_.datagram_was_sent( cm.header.sequence_number,
+         cm.header.send_timestamp,
+         after_timeout );
+  usleep(intervalNs / 1000);
 }
 
-bool DatagrumpSender::window_is_open()
-{
-  return controller_.should_send(sequence_number_ - next_ack_expected_);
+void* receiveProc(void *sender) {
+  DatagrumpSender *s = (DatagrumpSender *)sender;
+  while (true) {
+    const UDPSocket::received_datagram recd = s->socket_.recv();
+    const ContestMessage ack  = recd.payload;
+    s->got_ack( recd.timestamp, ack );
+    {
+      std::lock_guard<std::mutex> lk(s->ack_lock);
+      if (s->waiting) {
+        s->cv.notify_all();
+      }
+    }
+  }
+  return NULL;
+}
+
+void* sendProc(void *sender){
+  DatagrumpSender *s = (DatagrumpSender *)sender;
+  while (true) {
+    {
+      std::unique_lock<std::mutex> lk(s->ack_lock);
+      s->waiting = true;
+      while (!s->window_is_open()) {
+        s->cv.wait(lk);
+      }
+      s->waiting = false;
+    }
+    s->send_datagram(false);
+  }
+  return NULL;
 }
 
 int DatagrumpSender::loop()
 {
-  /* read and write from the receiver using an event-driven "poller" */
-  Poller poller;
-
-  /* first rule: if the window is open, close it by
-     sending more datagrams */
-  poller.add_action( Action( socket_, Direction::Out, [&] () {
-	/* Close the window */
-	while ( window_is_open() ) {
-	  send_datagram( false );
-	}
-	return ResultType::Continue;
-      },
-      /* We're only interested in this rule when the window is open */
-      [&] () { return window_is_open(); } ) );
-
-  /* second rule: if sender receives an ack,
-     process it and inform the controller
-     (by using the sender's got_ack method) */
-  poller.add_action( Action( socket_, Direction::In, [&] () {
-	const UDPSocket::received_datagram recd = socket_.recv();
-	const ContestMessage ack  = recd.payload;
-	got_ack( recd.timestamp, ack );
-	return ResultType::Continue;
-      } ) );
-
-  /* Run these two rules forever */
-  while ( true ) {
-    const auto ret = poller.poll( controller_.timeout_ms() );
-    if ( ret.result == PollResult::Exit ) {
-      return ret.exit_status;
-    } else if ( ret.result == PollResult::Timeout ) {
-      /* After a timeout, send one datagram to try to get things moving again */
-      send_datagram( true );
-    }
-  }
+  pthread_t sendrt;
+  pthread_create(&sendrt, NULL, sendProc, this);
+  pthread_t receivert;
+  pthread_create(&receivert, NULL, receiveProc, this);
+  while (true) {}
+  return 0;
 }
