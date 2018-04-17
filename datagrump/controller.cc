@@ -19,7 +19,7 @@ unsigned int Controller::window_size()
 	 << " window size is " << current_window << endl;
   }
 
-  return current_window;
+  return (int) current_window;
 }
 
 /* A datagram was sent */
@@ -30,7 +30,9 @@ void Controller::datagram_was_sent( const uint64_t sequence_number,
 				    const bool after_timeout
 				    /* datagram was sent because of a timeout */ )
 {
-  /* Default: take no action */
+  if (after_timeout) {
+    current_window /= 2;
+  }
 
   if ( debug_ ) {
     cerr << "At time " << send_timestamp
@@ -48,18 +50,7 @@ void Controller::ack_received( const uint64_t sequence_number_acked,
 			       const uint64_t timestamp_ack_received )
                                /* when the ack was received (by sender) */
 {
-  /* Default: take no action */
-  uint64_t rtt = timestamp_ack_received - send_timestamp_acked;
-  
-  if (rtt > 160) {
-    current_window /= 2;
-  } else {
-    current_window ++;
-  }
-  if (current_window < 4) {
-    current_window = 4;
-  }
-
+  current_window = current_window + 1/current_window;
 
   if ( debug_ ) {
     cerr << "At time " << timestamp_ack_received
